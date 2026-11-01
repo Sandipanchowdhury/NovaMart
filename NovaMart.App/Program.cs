@@ -1,125 +1,155 @@
 ﻿namespace NovaMart.App;
 
-class Program
+internal class Program
 {
-    static void Main(string[] args)
+    private const decimal GSTRate = 0.18m;
+
+    private static void Main(string[] args)
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-        const decimal GSTRate = 0.18m;
         decimal cartSubtotal = 0m;
         decimal cartDiscount = 0m;
-        int itemsAdded =0;
+        int itemsAdded = 0;
 
-        Console.WriteLine("===NovaMart: Build your Cart ===");
+
+        Console.WriteLine("=== NovaMart: Build Your Cart ===");
 
         while (true)
         {
             Console.WriteLine();
-            Console.Write("Product name(or 'done' to finish): ");
-            string  name = (Console.ReadLine() ?? "").Trim();
+            string name = ReadText("Product name( or 'done' to finish): ");
 
-            if(name.Equals("done" , StringComparison.OrdinalIgnoreCase))
+            if (name.Equals("done", StringComparison.OrdinalIgnoreCase))
             {
                 break;
             }
-            
+
             if(name.Length == 0)
             {
-                Console.WriteLine("Name cannot be empty.");
+                Console.WriteLine("name cannot be empty.");
+                continue ;           
+            }
+
+            decimal unitPrice = ReadPositiveDecimal("Unit price (₹): ");
+
+            int? enteredQuantity = ReadPositiveInt("Quantity");
+            if(enteredQuantity is null)
+            {
+                Console.WriteLine("Too many invalid attepms. Item skipped.");
                 continue;
             }
+            int quantity = enteredQuantity.Value;
 
-            decimal unitPrice;
-
-            
-            while (true)
-            {
-                Console.Write("Unit price (₹): ");
-                if (decimal.TryParse(Console.ReadLine(), out unitPrice) && unitPrice> 0)
-                {
-                    break;
-                }
-                Console.WriteLine("Enter a valid price greater than 0.");
-            }
-
-{            // Give the user only 3 attempts for quantity
-            int quantity = 0;
-            bool quantityValid = false;
-
-            for(int attempt = 1; attempt <= 3; attempt++)
-            {
-                Console.Write($"Quantity (attempt {attempt}/3):");
-                if(int.TryParse(Console.ReadLine(), out quantity) && quantity > 0)
-                {
-                    quantityValid = true;
-                    break;
-                }
-                    Console.WriteLine("Quantity must be a whole number greater than 0.");
-            }
-
-            if (!quantityValid)
-            {
-                Console.WriteLine("Too many invalid attemps. Item Skipped");
-                continue;
-            }
-
-            Console.Write("Stock available: ");
-            int stock = int.TryParse(Console.ReadLine(), out int parsedStock) && parsedStock >= 0 ? parsedStock : 0;
-
-            string stockStatus = stock switch
-            {
-                0 => "Out of stock",
-                <= 10 => "Low stock",
-                _=>"In Stock"
-            };
-            Console.WriteLine($"Stock status: {stockStatus}");
+            int stock = ReadStock();
+            Console.WriteLine($"Stock status: {GetStockStatus(stock)}");
 
             if (quantity > stock)
             {
-                Console.WriteLine($"Only {stock} available. Item not added.");
+                Console.WriteLine($"Only {stock} available. Item not added. ");
                 continue;
             }
 
-            decimal discountRate = quantity switch
-            {
-                >= 50 =>0.15m,
-                >= 10 => 0.10m,
-                _=> 0m
-            };
-            
-            
+            decimal discountrate = GetDiscountRate(quantity);
             decimal lineSubtotal = unitPrice * quantity;
-            decimal lineDiscount = lineSubtotal * discountRate;
+            decimal lineDiscount = lineSubtotal * discountrate;
 
-            cartSubtotal +=  lineSubtotal;
+            cartSubtotal += lineSubtotal;
             cartDiscount += lineDiscount;
-            itemsAdded++;
+            itemsAdded ++;
 
-            Console.WriteLine($"Added {quantity} X {name} = ₹{lineSubtotal - lineDiscount:N2}"+$"(discount {discountRate:P0})");
-
-            if (itemsAdded == 0)
-            {
-                Console.WriteLine("\nYour cart is empty.");
-                return;
-            }
-
-            decimal taxable = cartSubtotal - cartDiscount;
-            decimal gst = taxable * GSTRate;
-            decimal grandTotal = taxable + gst;
-
-            Console.WriteLine();
-            Console.WriteLine(new string('=', 36));
-            Console.WriteLine($"Items added : {itemsAdded}");
-            Console.WriteLine($"Subtotal    : ₹{cartSubtotal:N2}");
-            Console.WriteLine($"Discount    : -₹{cartDiscount:N2}");
-            Console.WriteLine($"GST (18%)   : ₹{gst:N2}");
-            Console.WriteLine($"Grand total : ₹{grandTotal:N2}");
-            Console.WriteLine(new string('=', 36));
-
+            Console.WriteLine($"added {quantity} x {name} = {FormatMoney(lineSubtotal -  lineDiscount)}" + $"(discount {discountrate:P0})");
 
         }
-        }
+        PrintBill(cartSubtotal , cartDiscount, itemsAdded );
+    }
+
+
+    // ---------------- Input helpers ---------------------
+
+    private static string ReadText(string prompt)
+    {
+        Console.Write(prompt);
+        return (Console.ReadLine() ?? "").Trim();
 
     }
+
+    private static decimal ReadPositiveDecimal(string prompt)
+    {
+        while (true)
+        {
+            Console.Write(prompt);
+            if(decimal.TryParse(Console.ReadLine(), out decimal value) && value > 0)
+            {
+                return value;
+            }
+            Console.WriteLine("Enter a valid number greater than 0.");
+        }
+    }
+
+    private static int? ReadPositiveInt(string lable, int maxAttempts = 3)
+    {
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            Console.Write($"{lable} (attempt {attempt}/{maxAttempts}): ");
+            if(int.TryParse(Console.ReadLine(), out int value) && value > 0)
+            {
+                return value;
+            }
+            Console.WriteLine($"{lable} must be a whole number greater than 0.");
+        }
+        return null;
+    }
+
+    private static int ReadStock()
+    {
+        Console.Write("Stock available: ");
+        return int.TryParse(Console.ReadLine(), out int stock) && stock >= 0 ? stock : 0;
+
+    }
+
+
+    // -------------- Business rules ----------------
+
+    private static string GetStockStatus(int stock) => stock switch
+    {
+        0 => "Out of stock",
+        <= 10 => "Low stock",
+        _=> "In stock"
+    };
+
+    private static decimal GetDiscountRate(int quantity) => quantity switch
+    {
+        >= 50 => 0.15m,
+        >= 10 => 0.10m,
+        _=> 0m
+    };
+
+    private static decimal CalculateGst(decimal taxableAmount) => taxableAmount * GSTRate;
+
+    //-------------------- Output -------------------
+    private static string FormatMoney(decimal amount) => $"₹{amount:N2}";
+
+    private static void PrintBill(decimal subtotal , decimal discount, int itemsAdded)
+    {
+        if(itemsAdded == 0)
+        {
+            Console.WriteLine("\nYour cart is empty.");
+            return;
+        }
+
+        decimal taxable = subtotal - discount;
+        decimal gst = CalculateGst(taxable);
+        decimal grandTotal = taxable + gst;
+
+        Console.WriteLine();
+        Console.WriteLine(new string('=', 36));
+        Console.WriteLine($"Items added : {itemsAdded}");
+        Console.WriteLine($"Subtotal    : {FormatMoney(subtotal)}");
+        Console.WriteLine($"Discount    : -{FormatMoney(discount)}");
+        Console.WriteLine($"GST (18%)   : {FormatMoney(gst)}");
+        Console.WriteLine($"Grand total : {FormatMoney(grandTotal)}");
+        Console.WriteLine(new string('=', 36));
+    }
+    
 }
