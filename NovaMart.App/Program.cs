@@ -1,155 +1,205 @@
-﻿namespace NovaMart.App;
+﻿using System.Text;
+
+namespace NovaMart.App;
 
 internal class Program
 {
     private const decimal GSTRate = 0.18m;
+    private const int MaxCartLines =  10;
 
     private static void Main(string[] args)
     {
-        Console.OutputEncoding = System.Text.Encoding.UTF8;
+        Console.OutputEncoding = Encoding.UTF8;
 
-        decimal cartSubtotal = 0m;
-        decimal cartDiscount = 0m;
-        int itemsAdded = 0;
+        // Catalog: parallel arrays, so index i describes product i
+        string[] names = {"Laptop", "Mobile" ,"Watch","headphones","keyboard"};
+        decimal[] prices = {50000m, 20000m, 10000m, 2500m, 1200m};
+        int[] stocks= {8, 25, 60 , 5, 0};
+
+        // Cart: parallel arrays with a fixed capacity
+        string[] cartNames = new string[MaxCartLines];
+        decimal[] cartPrices = new decimal[MaxCartLines];
+        int[] cartQuantities = new int[MaxCartLines];
+        int cartCount = 0;
 
 
-        Console.WriteLine("=== NovaMart: Build Your Cart ===");
+        Console.WriteLine("=== NovaMart ===");
+        PrintCatalog(names, prices, stocks);
 
-        while (true)
+        while(cartCount < MaxCartLines)
         {
             Console.WriteLine();
-            string name = ReadText("Product name( or 'done' to finish): ");
+            string search = ReadText("Product name (or 'done' to finish): ");
 
-            if (name.Equals("done", StringComparison.OrdinalIgnoreCase))
+            if(search.Equals("done", StringComparison.OrdinalIgnoreCase))
             {
                 break;
             }
 
-            if(name.Length == 0)
+            if (string.IsNullOrWhiteSpace(search))
             {
-                Console.WriteLine("name cannot be empty.");
-                continue ;           
-            }
-
-            decimal unitPrice = ReadPositiveDecimal("Unit price (₹): ");
-
-            int? enteredQuantity = ReadPositiveInt("Quantity");
-            if(enteredQuantity is null)
-            {
-                Console.WriteLine("Too many invalid attepms. Item skipped.");
-                continue;
-            }
-            int quantity = enteredQuantity.Value;
-
-            int stock = ReadStock();
-            Console.WriteLine($"Stock status: {GetStockStatus(stock)}");
-
-            if (quantity > stock)
-            {
-                Console.WriteLine($"Only {stock} available. Item not added. ");
+                Console.WriteLine("Name cannot be empty.");
                 continue;
             }
 
-            decimal discountrate = GetDiscountRate(quantity);
-            decimal lineSubtotal = unitPrice * quantity;
-            decimal lineDiscount = lineSubtotal * discountrate;
 
-            cartSubtotal += lineSubtotal;
-            cartDiscount += lineDiscount;
-            itemsAdded ++;
+            int index = FindProductIndex(names , search);
+            if (index == -1)
+            {
+                Console.WriteLine($"No product named '{search}' . Check the catalog above .");
+                continue;
+            }
 
-            Console.WriteLine($"added {quantity} x {name} = {FormatMoney(lineSubtotal -  lineDiscount)}" + $"(discount {discountrate:P0})");
+            Console.WriteLine($"{names[index]}: {FormatMoney(prices[index])} -" + 
+                              $"{GetStockStatus(stocks[index])} ({stocks[index]} left)");
 
+
+            int? entered = ReadPositiveInt("Quantity");
+            if(entered is null)
+            {
+                Console.WriteLine("Too many invalid attempts. Item skipped . ");
+                continue;
+            }
+            int quantity = entered.Value;
+
+            if (quantity > stocks[index])
+            {
+                Console.WriteLine($"Only {stocks[index]} available. item not added.");
+                continue;
+            }
+
+            cartNames[cartCount] = names[index];
+            cartPrices[cartCount] = prices[index];
+            cartQuantities[cartCount] = quantity;
+            cartCount++;
+
+            stocks[index] -= quantity;
+            Console.WriteLine($"Added {quantity} X { names[index]} to the cart.");
         }
-        PrintBill(cartSubtotal , cartDiscount, itemsAdded );
+
+        if(cartCount == MaxCartLines)
+        {
+            Console.WriteLine($"\nCart is Full ({MaxCartLines}) lines).");
+        }
+        PrintBill(cartNames, cartPrices, cartQuantities, cartCount);
+
     }
 
 
-    // ---------------- Input helpers ---------------------
+    // --------------- Array helpers -------------
 
-    private static string ReadText(string prompt)
+    private static int FindProductIndex(string[] names, string search)
+    {
+        for (int i = 0 ;i< names.Length; i++)
+        {
+            if(names[i].Equals(search, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+        return -1; // -1 means "not found"
+    }
+
+    // ------------- Input helpers ------------
+
+    private static string  ReadText(string prompt)
     {
         Console.Write(prompt);
-        return (Console.ReadLine() ?? "").Trim();
-
+        return(Console.ReadLine() ?? "").Trim();
     }
 
-    private static decimal ReadPositiveDecimal(string prompt)
+    private static int? ReadPositiveInt(string label, int  maxAttempts = 3)
     {
-        while (true)
+        for ( int attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            Console.Write(prompt);
-            if(decimal.TryParse(Console.ReadLine(), out decimal value) && value > 0)
-            {
-                return value;
-            }
-            Console.WriteLine("Enter a valid number greater than 0.");
-        }
-    }
-
-    private static int? ReadPositiveInt(string lable, int maxAttempts = 3)
-    {
-        for (int attempt = 1; attempt <= maxAttempts; attempt++)
-        {
-            Console.Write($"{lable} (attempt {attempt}/{maxAttempts}): ");
+            Console.Write($"{label} (attempt {attempt}/{maxAttempts}): ");
             if(int.TryParse(Console.ReadLine(), out int value) && value > 0)
             {
                 return value;
             }
-            Console.WriteLine($"{lable} must be a whole number greater than 0.");
+            Console.WriteLine($"{label} must be a whole number greater than 0.");
         }
         return null;
     }
 
-    private static int ReadStock()
-    {
-        Console.Write("Stock available: ");
-        return int.TryParse(Console.ReadLine(), out int stock) && stock >= 0 ? stock : 0;
-
-    }
-
-
-    // -------------- Business rules ----------------
+    //---------------- Business rules ---------------
 
     private static string GetStockStatus(int stock) => stock switch
     {
-        0 => "Out of stock",
+        0 =>"Out of stock",
         <= 10 => "Low stock",
-        _=> "In stock"
+        _=> " In stock"
     };
 
     private static decimal GetDiscountRate(int quantity) => quantity switch
     {
         >= 50 => 0.15m,
         >= 10 => 0.10m,
-        _=> 0m
+        _ => 0m
     };
 
-    private static decimal CalculateGst(decimal taxableAmount) => taxableAmount * GSTRate;
+    private static decimal CalculateGst(decimal taxableAmount) => taxableAmount *GSTRate;
 
-    //-------------------- Output -------------------
-    private static string FormatMoney(decimal amount) => $"₹{amount:N2}";
 
-    private static void PrintBill(decimal subtotal , decimal discount, int itemsAdded)
+    // ----------------- Output ---------------------
+
+    private static string FormatMoney(decimal amount) => $"₹{amount:N0}";
+
+    private static void PrintCatalog(string[] names, decimal[] prices , int[] stocks)
     {
-        if(itemsAdded == 0)
+        Console.WriteLine();
+        Console.WriteLine($"{"#", -4}{"Product" , -14} {"Price (₹)", 12}{"Stock", 8} Status");
+        Console.WriteLine(new string('-', 50 ));
+
+        for (int i =0 ; i< names.Length; i++)
+        {
+            Console.WriteLine($"{i + 1,-4}{names[i],-14}{prices[i],12:N2}{stocks[i],8}  {GetStockStatus(stocks[i])}");
+
+        }
+
+    }
+
+    private static void PrintBill(string[] names, decimal[] prices, int[] quantities, int lineCount)
+    {
+        if (lineCount == 0)
         {
             Console.WriteLine("\nYour cart is empty.");
             return;
+        }
+
+        decimal subtotal = 0m;
+        decimal discount = 0m;
+
+        var sb = new StringBuilder();
+        sb.AppendLine();
+        sb.AppendLine(new string('=', 50));
+        sb.AppendLine($"{"Item",-14}{"Qty",5}{"Price",12}{"Total",14}");
+        sb.AppendLine(new string('-', 50));
+
+        for (int i = 0; i < lineCount; i++)
+        {
+            decimal lineTotal = prices[i] * quantities[i];
+            subtotal += lineTotal;
+            discount += lineTotal * GetDiscountRate(quantities[i]);
+
+            sb.AppendLine($"{names[i],-14}{quantities[i],5}{prices[i],12:N2}{lineTotal,14:N2}");
         }
 
         decimal taxable = subtotal - discount;
         decimal gst = CalculateGst(taxable);
         decimal grandTotal = taxable + gst;
 
-        Console.WriteLine();
-        Console.WriteLine(new string('=', 36));
-        Console.WriteLine($"Items added : {itemsAdded}");
-        Console.WriteLine($"Subtotal    : {FormatMoney(subtotal)}");
-        Console.WriteLine($"Discount    : -{FormatMoney(discount)}");
-        Console.WriteLine($"GST (18%)   : {FormatMoney(gst)}");
-        Console.WriteLine($"Grand total : {FormatMoney(grandTotal)}");
-        Console.WriteLine(new string('=', 36));
+        sb.AppendLine(new string('-', 50));
+        sb.AppendLine($"{"Subtotal",-31}{FormatMoney(subtotal),19}");
+        sb.AppendLine($"{"Discount",-31}{"-" + FormatMoney(discount),19}");
+        sb.AppendLine($"{"GST (18%)",-31}{FormatMoney(gst),19}");
+        sb.AppendLine($"{"Grand total",-31}{FormatMoney(grandTotal),19}");
+        sb.AppendLine(new string('=', 50));
+
+        Console.Write(sb.ToString());
+
     }
-    
+
+
+
 }
